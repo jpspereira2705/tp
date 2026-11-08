@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Testemunho Público — Adicionar ao calendário</title>
+<style>
+  :root { --bg:#f4f6f9; --card:#ffffff; --fg:#1d2733; --muted:#5f6b7a; --accent:#2b6aa8; --ok:#3f9d4a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16191d; --card:#22272e; --fg:#e8ecf1; --muted:#9aa5b1; --accent:#5b9bd8; --ok:#5cbf68; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:var(--bg); color:var(--fg); font:16px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; padding:16px; }
+  .card { background:var(--card); border-radius:16px; padding:24px 22px; max-width:420px; width:100%;
+          box-shadow:0 6px 24px rgba(0,0,0,.12); }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 18px; font-size:14px; }
+  .row { display:flex; gap:10px; margin:8px 0; }
+  .row b { min-width:96px; color:var(--muted); font-weight:600; }
+  .btn { display:block; width:100%; text-align:center; margin-top:20px; padding:14px; border-radius:12px; border:0;
+         background:var(--accent); color:#fff; font-size:17px; font-weight:600; text-decoration:none; cursor:pointer; }
+  .btn.alt { background:transparent; color:var(--accent); border:1px solid var(--accent); margin-top:10px; font-size:15px; padding:11px; }
+  .note { color:var(--muted); font-size:13px; margin-top:16px; }
+  .err { color:#c0392b; }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <h1>Testemunho Público</h1>
+  <p class="sub">A preparar o turno…</p>
+</div>
+<script>
+(function () {
+  function decode(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    var bin = atob(s), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return JSON.parse(new TextDecoder("utf-8").decode(bytes));
+  }
+  function esc(t) { return String(t).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n"); }
+  function fold(line) {
+    var out = [], cur = "", n = 0, enc = new TextEncoder();
+    for (var ch of line) { var b = enc.encode(ch).length; if (n + b > (out.length ? 74 : 75)) { out.push(cur); cur = ""; n = 0; } cur += ch; n += b; }
+    out.push(cur); return out.join("\r\n ");
+  }
+  function html(t) { return String(t).replace(/[&<>"]/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); }
+  var card = document.getElementById("card");
+  var m = location.hash.match(/[#&]d=([^&]+)/);
+  var ev;
+  try { ev = decode(m[1]); } catch (e) {
+    card.innerHTML = '<h1>Testemunho Público</h1><p class="err">Este link não tem um turno válido. Abra-o a partir do ícone de calendário na folha de designações (PDF).</p>';
+    return;
+  }
+  // ev: {t: título, l: local, s: início AAAAMMDDTHHMM, e: fim, n: nome, r: papel, o: outro, or: papel do outro, x: info extra}
+  var dias = ["Domingo","Segunda-feira","Terça-feira","Quarta-feira","Quinta-feira","Sexta-feira","Sábado"];
+  var y = +ev.s.slice(0,4), mo = +ev.s.slice(4,6), d = +ev.s.slice(6,8);
+  var dt = new Date(y, mo - 1, d);
+  var hm = function (v) { return v.slice(9,11) + ":" + v.slice(11,13); };
+  var dataTxt = dias[dt.getDay()] + ", " + ("0"+d).slice(-2) + "/" + ("0"+mo).slice(-2) + "/" + y;
+  var desc = [ev.r + ": " + ev.n]; if (ev.o) desc.push(ev.or + ": " + ev.o); desc.push("Local: " + ev.l); if (ev.x) desc.push(ev.x);
+  var stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+  var uid = (ev.s + "-" + ev.n + "-" + ev.l).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-") + "@testemunho-publico";
+  var lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Testemunho Publico//Designacoes//PT","CALSCALE:GREGORIAN","METHOD:PUBLISH",
+    "BEGIN:VEVENT","UID:" + uid,"DTSTAMP:" + stamp,"DTSTART:" + ev.s + "00","DTEND:" + ev.e + "00",
+    "SUMMARY:" + esc(ev.t),"LOCATION:" + esc(ev.l),"DESCRIPTION:" + esc(desc.join("\n"))];
+  [["-P7D","daqui a 1 semana"],["-P2D","daqui a 2 dias"]].forEach(function (a) {
+    lines.push("BEGIN:VALARM","ACTION:DISPLAY","TRIGGER:" + a[0],"DESCRIPTION:" + esc("Testemunho Público " + a[1] + ": " + ev.t.replace(/^Testemunho Público — /, "") + ", " + hm(ev.s)),"END:VALARM");
+  });
+  lines.push("END:VEVENT","END:VCALENDAR");
+  var ics = lines.map(fold).join("\r\n") + "\r\n";
+  var fname = (ev.n + " - " + ("0"+d).slice(-2) + "-" + ("0"+mo).slice(-2) + "-" + y + " " + hm(ev.s).replace(":", "h") + ".ics").replace(/[\\/:*?"<>|]+/g, "-");
+  var ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var gcal = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" + encodeURIComponent(ev.t) +
+    "&dates=" + ev.s + "00/" + ev.e + "00&location=" + encodeURIComponent(ev.l) + "&details=" + encodeURIComponent(desc.join("\n"));
+  card.innerHTML =
+    '<h1>' + html(ev.t) + '</h1><p class="sub">Turno designado</p>' +
+    '<div class="row"><b>Publicador</b><span>' + html(ev.n) + ' (' + html(ev.r) + ')</span></div>' +
+    (ev.o ? '<div class="row"><b>' + html(ev.or) + '</b><span>' + html(ev.o) + '</span></div>' : '') +
+    '<div class="row"><b>Data</b><span>' + dataTxt + '</span></div>' +
+    '<div class="row"><b>Horário</b><span>' + hm(ev.s) + ' – ' + hm(ev.e) + '</span></div>' +
+    '<div class="row"><b>Local</b><span>' + html(ev.l) + '</span></div>' +
+    '<button class="btn" id="add">📅 Adicionar ao calendário</button>' +
+    '<a class="btn alt" href="' + gcal + '" target="_blank" rel="noopener">Usar o Google Calendar</a>' +
+    '<p class="note">Inclui avisos 1 semana e 2 dias antes do turno.<br>Esta página não guarda nenhum dado: a informação do turno vem no próprio link.</p>';
+  function download() {
+    var blob = new Blob([ics], {type: "text/calendar;charset=utf-8"});
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname;
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }
+  function add() {
+    if (ios) {
+      // no iPhone/iPad abre diretamente o ecrã «Adicionar ao Calendário»;
+      // se o browser não o permitir (alguns browsers dentro de apps), descarrega o ficheiro
+      var left = false;
+      var onHide = function () { left = true; };
+      document.addEventListener("visibilitychange", onHide);
+      window.addEventListener("pagehide", onHide);
+      try { location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics); } catch (e) {}
+      setTimeout(function () { if (!left && !document.hidden) download(); }, 1500);
+      return;
+    }
+    download();
+  }
+  document.getElementById("add").addEventListener("click", add);
+})();
+</script>
+</body>
+</html>
