@@ -48,7 +48,10 @@
   }
   function html(t) { return String(t).replace(/[&<>"]/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); }
   var card = document.getElementById("card");
-  var m = location.hash.match(/[#&]d=([^&]+)/);
+  // os dados do turno vêm no link: «?d=…» (forma atual) ou «#d=…» (forma antiga)
+  var src = location.search + "&" + location.hash;
+  try { src = decodeURIComponent(src); } catch (e) {}
+  var m = src.match(/[?#&]d=([^&#?]+)/);
   var ev;
   try { ev = decode(m[1]); } catch (e) {
     card.innerHTML = '<h1>Testemunho Público</h1><p class="err">Este link não tem um turno válido. Abra-o a partir do ícone de calendário na folha de designações (PDF).</p>';
