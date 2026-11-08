@@ -68,9 +68,6 @@
   var dt = new Date(y, mo - 1, d);
   var hm = function (v) { return v.slice(9,11) + ":" + v.slice(11,13); };
   var dataTxt = dias[dt.getDay()] + ", " + ("0"+d).slice(-2) + "/" + ("0"+mo).slice(-2) + "/" + y;
-  // nome do evento: «Testemunho Público — Local com Colega» (sem os números dos carrinhos)
-  var lugar = String(ev.l).replace(/\s*\(Carrinhos?[^)]*\)\s*$/i, "");
-  var titulo = "Testemunho Público — " + lugar + (ev.o ? " com " + ev.o : "");
   var desc = [ev.r + ": " + ev.n]; if (ev.o) desc.push(ev.or + ": " + ev.o); desc.push("Local: " + ev.l); if (ev.x) desc.push(ev.x);
   function makeIcs() {
   var stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
@@ -79,17 +76,17 @@
             "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + "@testemunho-publico";
   var lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Testemunho Publico//Designacoes//PT","CALSCALE:GREGORIAN","METHOD:PUBLISH",
     "BEGIN:VEVENT","UID:" + uid,"DTSTAMP:" + stamp,"DTSTART:" + ev.s + "00","DTEND:" + ev.e + "00",
-    "SUMMARY:" + esc(titulo),"LOCATION:" + esc(lugar),"DESCRIPTION:" + esc(desc.join("\n"))];
+    "SUMMARY:" + esc(ev.t),"LOCATION:" + esc(ev.l),"DESCRIPTION:" + esc(desc.join("\n"))];
   [["-P7D","daqui a 1 semana"],["-P2D","daqui a 2 dias"]].forEach(function (a) {
-    lines.push("BEGIN:VALARM","ACTION:DISPLAY","TRIGGER:" + a[0],"DESCRIPTION:" + esc("Testemunho Público " + a[1] + ": " + lugar + ", " + hm(ev.s)),"END:VALARM");
+    lines.push("BEGIN:VALARM","ACTION:DISPLAY","TRIGGER:" + a[0],"DESCRIPTION:" + esc("Testemunho Público " + a[1] + ": " + ev.t.replace(/^Testemunho Público — /, "") + ", " + hm(ev.s)),"END:VALARM");
   });
   lines.push("END:VEVENT","END:VCALENDAR");
   return lines.map(fold).join("\r\n") + "\r\n";
   }
   var fname = (ev.n + " - " + ("0"+d).slice(-2) + "-" + ("0"+mo).slice(-2) + "-" + y + " " + hm(ev.s).replace(":", "h") + ".ics").replace(/[\\/:*?"<>|]+/g, "-");
   var ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  var gcal = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" + encodeURIComponent(titulo) +
-    "&dates=" + ev.s + "00/" + ev.e + "00&location=" + encodeURIComponent(lugar) + "&details=" + encodeURIComponent(desc.join("\n"));
+  var gcal = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" + encodeURIComponent(ev.t) +
+    "&dates=" + ev.s + "00/" + ev.e + "00&location=" + encodeURIComponent(ev.l) + "&details=" + encodeURIComponent(desc.join("\n"));
   card.innerHTML =
     '<h1>' + html(ev.t) + '</h1><p class="sub">Turno designado</p>' +
     '<div class="row"><b>Publicador</b><span>' + html(ev.n) + ' (' + html(ev.r) + ')</span></div>' +
@@ -106,7 +103,7 @@
     var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname;
     document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   }
-  // «Adicionar ao calendário» descarrega o ficheiro .ics (abre-o para o juntar ao calendário)
+  // «Adicionar ao calendário» descarrega o ficheiro do calendário (.ics)
   document.getElementById("add").addEventListener("click", download);
 })();
 </script>
