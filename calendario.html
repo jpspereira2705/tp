@@ -52,9 +52,14 @@
   var src = location.search + "&" + location.hash;
   try { src = decodeURIComponent(src); } catch (e) {}
   var m = src.match(/[?#&]d=([^&#?]+)/);
+  var VERSAO = "3";
   var ev;
   try { ev = decode(m[1]); } catch (e) {
-    card.innerHTML = '<h1>Testemunho Público</h1><p class="err">Este link não tem um turno válido. Abra-o a partir do ícone de calendário na folha de designações (PDF).</p>';
+    var info = m ? ("o link chegou com dados incompletos (" + m[1].length + " caracteres)") :
+               ((location.search || location.hash) ? "o link chegou sem os dados do turno" : "o link não tem dados do turno");
+    card.innerHTML = '<h1>Testemunho Público</h1><p class="err">Este link não tem um turno válido. Abra-o a partir do ícone de calendário na folha de designações (PDF).</p>' +
+      '<p class="note">Detalhe: ' + info + '.<br>Se a folha (PDF) foi criada antes de a página ser atualizada, volte a exportá-la na aplicação.</p>' +
+      '<p class="note">Página versão ' + VERSAO + '</p>';
     return;
   }
   // ev: {t: título, l: local, s: início AAAAMMDDTHHMM, e: fim, n: nome, r: papel, o: outro, or: papel do outro, x: info extra}
@@ -64,8 +69,11 @@
   var hm = function (v) { return v.slice(9,11) + ":" + v.slice(11,13); };
   var dataTxt = dias[dt.getDay()] + ", " + ("0"+d).slice(-2) + "/" + ("0"+mo).slice(-2) + "/" + y;
   var desc = [ev.r + ": " + ev.n]; if (ev.o) desc.push(ev.or + ": " + ev.o); desc.push("Local: " + ev.l); if (ev.x) desc.push(ev.x);
+  function makeIcs() {
   var stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
-  var uid = (ev.s + "-" + ev.n + "-" + ev.l).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-") + "@testemunho-publico";
+  // código único em cada toque: se o evento for apagado do calendário, pode voltar a ser adicionado
+  var uid = (ev.s + "-" + ev.n + "-" + ev.l).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-") +
+            "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + "@testemunho-publico";
   var lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Testemunho Publico//Designacoes//PT","CALSCALE:GREGORIAN","METHOD:PUBLISH",
     "BEGIN:VEVENT","UID:" + uid,"DTSTAMP:" + stamp,"DTSTART:" + ev.s + "00","DTEND:" + ev.e + "00",
     "SUMMARY:" + esc(ev.t),"LOCATION:" + esc(ev.l),"DESCRIPTION:" + esc(desc.join("\n"))];
@@ -73,7 +81,8 @@
     lines.push("BEGIN:VALARM","ACTION:DISPLAY","TRIGGER:" + a[0],"DESCRIPTION:" + esc("Testemunho Público " + a[1] + ": " + ev.t.replace(/^Testemunho Público — /, "") + ", " + hm(ev.s)),"END:VALARM");
   });
   lines.push("END:VEVENT","END:VCALENDAR");
-  var ics = lines.map(fold).join("\r\n") + "\r\n";
+  return lines.map(fold).join("\r\n") + "\r\n";
+  }
   var fname = (ev.n + " - " + ("0"+d).slice(-2) + "-" + ("0"+mo).slice(-2) + "-" + y + " " + hm(ev.s).replace(":", "h") + ".ics").replace(/[\\/:*?"<>|]+/g, "-");
   var ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   var gcal = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" + encodeURIComponent(ev.t) +
@@ -86,28 +95,25 @@
     '<div class="row"><b>Horário</b><span>' + hm(ev.s) + ' – ' + hm(ev.e) + '</span></div>' +
     '<div class="row"><b>Local</b><span>' + html(ev.l) + '</span></div>' +
     '<button class="btn" id="add">📅 Adicionar ao calendário</button>' +
+    '<button class="btn alt" id="dl">Descarregar o ficheiro do calendário (.ics)</button>' +
     '<a class="btn alt" href="' + gcal + '" target="_blank" rel="noopener">Usar o Google Calendar</a>' +
-    '<p class="note">Inclui avisos 1 semana e 2 dias antes do turno.<br>Esta página não guarda nenhum dado: a informação do turno vem no próprio link.</p>';
+    '<p class="note">Inclui avisos 1 semana e 2 dias antes do turno.<br>Esta página não guarda nenhum dado: a informação do turno vem no próprio link.</p>' +
+    '<p class="note">Página versão ' + VERSAO + '</p>';
   function download() {
-    var blob = new Blob([ics], {type: "text/calendar;charset=utf-8"});
+    var blob = new Blob([makeIcs()], {type: "text/calendar;charset=utf-8"});
     var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname;
     document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   }
   function add() {
     if (ios) {
-      // no iPhone/iPad abre diretamente o ecrã «Adicionar ao Calendário»;
-      // se o browser não o permitir (alguns browsers dentro de apps), descarrega o ficheiro
-      var left = false;
-      var onHide = function () { left = true; };
-      document.addEventListener("visibilitychange", onHide);
-      window.addEventListener("pagehide", onHide);
-      try { location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics); } catch (e) {}
-      setTimeout(function () { if (!left && !document.hidden) download(); }, 1500);
+      // no iPhone/iPad abre diretamente o ecrã «Adicionar ao Calendário»
+      location.href = "data:text/calendar;charset=utf-8," + encodeURIComponent(makeIcs());
       return;
     }
     download();
   }
   document.getElementById("add").addEventListener("click", add);
+  document.getElementById("dl").addEventListener("click", download);
 })();
 </script>
 </body>
